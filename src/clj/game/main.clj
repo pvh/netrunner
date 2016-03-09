@@ -13,6 +13,9 @@
 (def last-states (atom {}))
 (def ctx (ZMQ/context 1))
 
+(def spectator-commands
+  {"say" core/say})
+
 (def commands
   {"say" core/say
    "concede" core/concede
@@ -22,6 +25,7 @@
    "mulligan" core/mulligan
    "keep" core/keep-hand
    "start-turn" core/start-turn
+   "end-phase-12" core/end-phase-12
    "end-turn" core/end-turn
    "draw" core/click-draw
    "credit" core/click-credit
@@ -32,6 +36,7 @@
    "derez" #(core/derez %1 %2 (:card %3))
    "run" core/click-run
    "no-action" core/no-action
+   "corp-phase-43" core/corp-phase-43
    "continue" core/continue
    "access" core/successful-run
    "jack-out" core/jack-out
@@ -42,7 +47,8 @@
    "shuffle" core/shuffle-deck
    "ability" core/play-ability
    "trash-resource" core/trash-resource
-   "auto-pump" core/auto-pump})
+   "auto-pump" core/auto-pump
+   "toast" core/toast})
 
 (defn convert [args]
   (try
@@ -56,15 +62,27 @@
 (defn strip [state]
   (dissoc state :events :turn-events :per-turn :prevent :damage))
 
+(defn not-spectator? [state user]
+  "Returns true if the specified user in the specified state is not a spectator"
+  (#{(get-in @state [:corp :user]) (get-in @state [:runner :user])} user))
+
+(defn handle-do [user command state side args]
+  "Ensures the user is allowed to do command they are trying to do"
+  (if (not-spectator? state user)
+    ((commands command) state (keyword side) args)
+    (when-let [cmd (spectator-commands command)]
+      (cmd state (keyword side) args))))
+
 (defn run [socket]
   (while true
-    (let [{:keys [gameid action command side args text] :as msg} (convert (.recv socket))
+    (let [{:keys [gameid action command side user args text] :as msg} (convert (.recv socket))
           state (@game-states gameid)]
       (try
         (case action
           "start" (core/init-game msg)
-          "remove" (swap! game-states dissoc gameid)
-          "do" ((commands command) state (keyword side) args)
+          "remove" (do (swap! game-states dissoc gameid)
+                       (swap! last-states dissoc gameid))
+          "do" (handle-do user command state side args)
           "notification" (when state
                            (swap! state update-in [:log] #(conj % {:user "__system__" :text text}))))
         (if-let [new-state (@game-states gameid)]

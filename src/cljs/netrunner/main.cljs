@@ -9,10 +9,10 @@
   (atom {:active-page "/"
          :user (js->clj js/user :keywordize-keys true)
          :cards [] :sets []
-         :decks []
+         :decks [] :decks-loaded false
          :games [] :gameid nil :messages []}))
 
-(def tokens #js ["/" "/cards" "/deckbuilder" "/play" "/about"])
+(def tokens #js ["/" "/cards" "/deckbuilder" "/play" "/help" "/about"])
 
 (def history (Html5History.))
 
@@ -36,7 +36,8 @@
                  ["Cards" "/cards" 1]
                  ["Deck Builder" "/deckbuilder" 2]
                  ["Play" "/play" 3]
-                 ["About" "/about" 4]]]
+                 ["Help" "/help" 4]
+                 ["About" "/about" 5]]]
        (let [route (second page)]
          [:li {:class (if (= (first (:active-page cursor)) route) "active" "")
                :on-click #(.setToken history route)
@@ -49,7 +50,7 @@
     [:div
      [:div.float-right
       (let [c (count (:games cursor))]
-        (str c " Game" (when (> c 1) "s")))]
+        (str c " Game" (when (not= c 1) "s")))]
      (when-let [game (some #(when (= (:gameid cursor) (:gameid %)) %) (:games cursor))]
        (when (:started game)
          [:div.float-right
